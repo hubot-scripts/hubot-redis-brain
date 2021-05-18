@@ -49,4 +49,41 @@ describe('redis-brain', () => {
 
     robot.shutdown()
   })
+  it('uses VCAP to connect to redis', () => {
+    process.env.VCAP_SERVICES = JSON.stringify({
+      'p-redis': [
+        {
+          'credentials': {
+            'host': '192.168.1.1',
+            'password': 'password',
+            'port': 6379
+          },
+          'syslog_drain_url': null,
+          'volume_mounts': [],
+          'label': 'p-redis',
+          'provider': null,
+          'plan': 'dedicated-vm',
+          'name': 'test-bot',
+          'tags': [
+            'pivotal',
+            'redis'
+          ]
+        }
+      ]
+    })
+    process.env.CF_REDIS_SERVICE = 'p-redis'
+    process.env.CF_REDIS_INSTANCE_NAME = 'test-bot'
+    const robot = new Robot(null, 'mock-adapter-v3', false, 'hubot')
+
+    sinon.spy(robot.logger, 'info')
+
+    robot.loadFile(path.resolve('src/'), 'redis-brain.js')
+    robot.run()
+
+    expect(RedisMock.createClient).to.have.been.calledTwice
+    expect(RedisMock.createClient).to.have.been.calledWith('6379', '192.168.1.1')
+    expect(robot.logger.info).to.have.been.calledWith('hubot-redis-brain: Discovered redis from CF_REDIS_INSTANCE_NAME environment variable. Pulling from VCAP')
+
+    robot.shutdown()
+  })
 })

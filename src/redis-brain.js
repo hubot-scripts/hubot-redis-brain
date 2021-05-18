@@ -9,6 +9,9 @@
 //     URL format (UNIX socket): redis://<socketpath>[?<brain_prefix>]
 //     If not provided, '<brain_prefix>' will default to 'hubot'.
 //   REDIS_NO_CHECK - set this to avoid ready check (for exampel when using Twemproxy)
+//   # CloudFoundry Vars (Use the following vars only for running in CF)
+//   CF_REDIS_SERVICE - Your CloudFoundry's Redis Service name (ie. p-redis or rediscloud)
+//   CF_REDIS_INSTANCE_NAME = The name you gave your service instance. This will be used as the brain_prefix
 //
 // Commands:
 //   None
@@ -17,14 +20,20 @@ const Url = require('url')
 const Redis = require('redis')
 
 module.exports = function (robot) {
-  let client, prefix
+  let client, prefix, redisUrl
   const redisUrlEnv = getRedisEnv()
-  const redisUrl = process.env[redisUrlEnv] || 'redis://localhost:6379'
 
   if (redisUrlEnv) {
-    robot.logger.info(`hubot-redis-brain: Discovered redis from ${redisUrlEnv} environment variable`)
+    if (redisUrlEnv === 'CF_REDIS_INSTANCE_NAME') {
+      robot.logger.info(`hubot-redis-brain: Discovered redis from ${redisUrlEnv} environment variable. Pulling from VCAP`)
+      redisUrl = buildCloudFoundryURL(robot)
+    } else {
+      robot.logger.info(`hubot-redis-brain: Discovered redis from ${redisUrlEnv} environment variable`)
+      redisUrl = process.env[redisUrlEnv]
+    }
   } else {
     robot.logger.info('hubot-redis-brain: Using default redis on localhost:6379')
+    redisUrl = 'redis://localhost:6379'
   }
 
   if (process.env.REDIS_NO_CHECK) {
@@ -112,4 +121,45 @@ function getRedisEnv () {
   if (process.env.REDIS_URL) {
     return 'REDIS_URL'
   }
+
+  if (process.env.CF_REDIS_SERVICE) {
+    return 'CF_REDIS_INSTANCE_NAME'
+  }
+}
+
+function buildCloudFoundryURL (robot) {
+  let host, hubotInstance
+  let services
+  try {
+    services = JSON.parse(process.env.VCAP_SERVICES)
+  } catch (e) {
+    services = process.env.VCAP_SERVICES
+  }
+  const redisService = services[process.env.CF_REDIS_SERVICE]
+  const instanceName = process.env.CF_REDIS_INSTANCE_NAME || null
+  if (instanceName) {
+    for (let instance of redisService) {
+      if (instance['name'] === instanceName) {
+        hubotInstance = instance
+        break
+      }
+    }
+    if (!hubotInstance) {
+      robot.logger.info('Could not find redis instance; reverting to localhost')
+      return 'redis://localhost:6379'
+    }
+  } else {
+    robot.logger.info('CF_REDIS_INSTANCE_NAME environment variable not set; reverting to localhost')
+    return 'redis://localhost:6379'
+  }
+  const redisCreds = hubotInstance['credentials']
+  if (redisCreds['hostname'] === undefined) {
+    host = redisCreds['host']
+  } else {
+    host = redisCreds['hostname']
+  }
+  const redisURL = 'redis://:' + redisCreds['password'] +
+    '@' + host +
+    ':' + redisCreds['port'] + '/' + process.env.CF_REDIS_INSTANCE_NAME
+  return redisURL
 }

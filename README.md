@@ -60,6 +60,15 @@ Redis Cloud or Redis To Go addon to have automatically configure itself to use i
 * [Redis Cloud](https://addons.heroku.com/rediscloud)
 * [Redis To Go](https://addons.heroku.com/redistogo)
 
+### CloudFoundry
+
+If you are deploying in a CloudFoundry environment, you can use any redis service available in your marketplace.
+
+You'll need to set two environment variables in this case: 
+`CF_REDIS_SERVICE` - Your CloudFoundry's Redis Service name (ie. p-redis or rediscloud) 
+`CF_REDIS_INSTANCE_NAME` - The name you gave your service instance. This will be used as the brain_prefix 
+
+### Other
 
 Other redis addons would need to be configured using `REDIS_URL` until support
 is added to hubot-redis-brain (or hubot-redis-brain needs to be updated to look
